@@ -28,9 +28,9 @@ export default function BlockRequestsPage() {
           {tasks.map(task => (
             <tr key={task.id} className={selectedTasks.includes(task.id) ? 'active' : ''}>
               <td>
-                <input 
-                  type="checkbox" 
-                  checked={selectedTasks.includes(task.id)} 
+                <input
+                  type="checkbox"
+                  checked={selectedTasks.includes(task.id)}
                   onChange={() => toggleTaskSelection(task.id)}
                 />
               </td>
@@ -38,14 +38,14 @@ export default function BlockRequestsPage() {
               <td>{task.department}</td>
               <td>
                 <div>{task.asset}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)'}}>{task.location}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{task.location}</div>
               </td>
               <td>
-                <div style={{display: 'flex', gap: '0.5rem', alignItems: 'center'}}>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                   <span className={`badge badge-${task.priority === 'CRITICAL' ? 'danger' : task.priority === 'HIGH' ? 'warning' : 'info'}`}>
                     {task.priority}
                   </span>
-                  <span style={{ fontSize: '0.75rem'}}>Risk: {task.risk}%</span>
+                  <span style={{ fontSize: '0.75rem' }}>Risk: {task.risk}%</span>
                 </div>
               </td>
               <td>{task.duration} min</td>

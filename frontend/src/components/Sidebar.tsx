@@ -10,8 +10,6 @@ import {
   Layers,
   Map,
   CheckSquare,
-  AlertTriangle,
-  BarChart
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -24,7 +22,7 @@ export default function Sidebar() {
         </div>
         <div className="sidebar-brand-text">
           <div className="sidebar-brand-name">RAILSYNC AI</div>
-          <div className="sidebar-brand-subtitle">Smart Rail Optimizer</div>
+          <div className="sidebar-brand-subtitle">Block Planning System</div>
         </div>
       </div>
 
@@ -42,6 +40,9 @@ export default function Sidebar() {
         <NavLink to="/block-planning" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
           <Zap /> Block Planning <span className="sidebar-badge">AI</span>
         </NavLink>
+        <NavLink to="/optimize" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+          <Activity /> Optimization Engine
+        </NavLink>
         <NavLink to="/what-if" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
           <Layers /> What-If Simulation
         </NavLink>
@@ -51,18 +52,16 @@ export default function Sidebar() {
 
         <div className="sidebar-section-label">Network & Assets</div>
         <NavLink to="/schedules" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-          <CalendarClock /> Timetable & Gantt
+          <CalendarClock /> Timetable
+        </NavLink>
+        <NavLink to="/trains" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+          <Train /> Train Fleet
+        </NavLink>
+        <NavLink to="/stations" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+          <MapPin /> Stations
         </NavLink>
         <NavLink to="/map" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
           <Map /> Railway Map
-        </NavLink>
-        <NavLink to="/trains" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-          <Train /> Fleet Management
-        </NavLink>
-        
-        <div className="sidebar-section-label">Analytics</div>
-        <NavLink to="/optimize" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-          <Activity /> Legacy Analytics
         </NavLink>
       </nav>
 
@@ -72,6 +71,9 @@ export default function Sidebar() {
           <div className="sidebar-status-dot" />
           <span>System Online</span>
           <Activity style={{ width: 14, height: 14, marginLeft: 'auto', opacity: 0.4 }} />
+        </div>
+        <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+          SIH26027 — Prototype v1.0
         </div>
       </div>
     </aside>

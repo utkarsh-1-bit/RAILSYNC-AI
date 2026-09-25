@@ -172,9 +172,8 @@ export default function SchedulesPage() {
                   {stops.map((s, i) => (
                     <div className="timeline-item" key={s.id}>
                       <div
-                        className={`timeline-dot ${
-                          i === 0 ? 'origin' : i === stops.length - 1 ? 'destination' : s.delay_minutes > 0 ? 'delayed' : ''
-                        }`}
+                        className={`timeline-dot ${i === 0 ? 'origin' : i === stops.length - 1 ? 'destination' : s.delay_minutes > 0 ? 'delayed' : ''
+                          }`}
                       />
                       <div className="timeline-content">
                         <div className="timeline-station">

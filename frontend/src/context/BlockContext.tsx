@@ -1,142 +1,332 @@
-import React, { createContext, useContext, useState } from 'react';
+/* ═══════════════════════════════════════════════════════════════
+   RAILSYNC AI — Centralized Block Context
+   Single source of truth for all pages
+   ═══════════════════════════════════════════════════════════════ */
+
+import { createContext, useContext, useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
+import {
+  STATIONS, SECTIONS, TRAINS, TIMETABLE, TRAIN_MOVEMENTS,
+  INITIAL_TASKS, INITIAL_BLOCKS, INITIAL_BLOCK_REQUESTS, DEFAULT_SCENARIOS,
+  type Station, type RailwaySection, type TrainEntry, type TimetableEntry,
+  type TrainMovement, type MaintenanceTask, type BlockWindow,
+  type BlockRequest, type Defect, type WhatIfScenario,
+} from '../data/railwayData';
+import {
+  optimizeBlocks, checkTrainConflicts, calculateRiskScore,
+  type OptimizedPlan,
+} from '../utils/planningEngine';
 
-// Task Types
-export type Department = 'Engineering' | 'S&T' | 'Traction';
-export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-export type TaskStatus = 'PENDING' | 'PLANNED' | 'COMPLETED';
-
-export interface MaintenanceTask {
-  id: string;
-  department: Department;
-  asset: string;
-  location: string;
-  priority: Priority;
-  risk: number;
-  duration: number; // in minutes
-  deadline: string;
-  status: TaskStatus;
-}
-
-export interface BlockWindow {
-  id: string;
-  section: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  duration: number;
-  status: 'AVAILABLE' | 'SCHEDULED' | 'EMERGENCY';
-  bundledTasks: string[];
-}
-
-export interface TrainMovement {
-  id: string;
-  name: string;
-  section: string;
-  time: string;
-}
+// Re-export types for convenience
+export type {
+  Station, RailwaySection, TrainEntry, TimetableEntry, TrainMovement,
+  MaintenanceTask, BlockWindow, BlockRequest, Defect, WhatIfScenario,
+};
+export type { Department, Priority, TaskStatus, BlockStatus, ApprovalStatus, TrainType } from '../data/railwayData';
 
 interface BlockContextType {
+  // Data
+  stations: Station[];
+  sections: RailwaySection[];
+  trains: TrainEntry[];
+  timetable: TimetableEntry[];
+  trainMovements: TrainMovement[];
   tasks: MaintenanceTask[];
   blocks: BlockWindow[];
-  trains: TrainMovement[];
-  toggleTaskSelection: (taskId: string) => void;
+  blockRequests: BlockRequest[];
+  defects: Defect[];
+  scenarios: WhatIfScenario[];
+
+  // Selection
   selectedTasks: string[];
-  optimizePlan: () => void;
+  toggleTaskSelection: (taskId: string) => void;
+  selectAllTasks: () => void;
+  clearSelection: () => void;
+
+  // Optimization
   isOptimizing: boolean;
-  optimizedBlocks: BlockWindow[];
-  addEmergencyDefect: () => void;
+  optimizedPlan: OptimizedPlan | null;
+  optimizePlan: () => void;
+  resetOptimization: () => void;
+
+  // Emergency
+  addEmergencyDefect: (section?: string) => void;
+
+  // Approvals
+  approveBlock: (blockId: string) => void;
+  rejectBlock: (blockId: string) => void;
+
+  // What-If
+  applyScenario: (scenarioId: string) => void;
+  resetScenarios: () => void;
+  reOptimize: () => void;
+
+  // Block Requests
+  updateRequestStatus: (requestId: string, status: BlockRequest['status']) => void;
 }
 
 const BlockContext = createContext<BlockContextType | undefined>(undefined);
 
-const initialTasks: MaintenanceTask[] = [
-  { id: 'T-101', department: 'Engineering', asset: 'Track Inspection', location: 'DDN-Haridwar', priority: 'HIGH', risk: 87, duration: 60, deadline: '2026-09-30', status: 'PENDING' },
-  { id: 'T-102', department: 'S&T', asset: 'Signal S-204 Maintenance', location: 'DDN-Haridwar', priority: 'MEDIUM', risk: 45, duration: 30, deadline: '2026-10-02', status: 'PENDING' },
-  { id: 'T-103', department: 'Traction', asset: 'OHE Inspection', location: 'DDN-Haridwar', priority: 'HIGH', risk: 78, duration: 45, deadline: '2026-09-29', status: 'PENDING' },
-  { id: 'T-104', department: 'Engineering', asset: 'Sleeper Replacement', location: 'Haridwar-Roorkee', priority: 'CRITICAL', risk: 95, duration: 120, deadline: '2026-09-27', status: 'PENDING' },
-];
-
-const initialBlocks: BlockWindow[] = [
-  { id: 'B-104', section: 'DDN-Haridwar', date: '2026-09-28', startTime: '11:30', endTime: '14:00', duration: 150, status: 'AVAILABLE', bundledTasks: [] },
-  { id: 'B-105', section: 'Haridwar-Roorkee', date: '2026-09-28', startTime: '02:00', endTime: '05:00', duration: 180, status: 'AVAILABLE', bundledTasks: [] },
-];
-
-export const BlockProvider: React.FC<{children: ReactNode}> = ({ children }) => {
-  const [tasks, setTasks] = useState<MaintenanceTask[]>(initialTasks);
-  const [blocks, setBlocks] = useState<BlockWindow[]>(initialBlocks);
-  const [trains, setTrains] = useState<TrainMovement[]>([]);
+export function BlockProvider({ children }: { children: ReactNode }) {
+  const [tasks, setTasks] = useState<MaintenanceTask[]>(INITIAL_TASKS);
+  const [blocks, setBlocks] = useState<BlockWindow[]>(INITIAL_BLOCKS);
+  const [blockRequests, setBlockRequests] = useState<BlockRequest[]>(INITIAL_BLOCK_REQUESTS);
+  const [defects, setDefects] = useState<Defect[]>([]);
+  const [scenarios, setScenarios] = useState<WhatIfScenario[]>(DEFAULT_SCENARIOS);
   const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
   const [isOptimizing, setIsOptimizing] = useState(false);
-  const [optimizedBlocks, setOptimizedBlocks] = useState<BlockWindow[]>([]);
+  const [optimizedPlan, setOptimizedPlan] = useState<OptimizedPlan | null>(null);
 
-  const toggleTaskSelection = (taskId: string) => {
-    setSelectedTasks(prev => 
-      prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]
+  // ─── Selection ──────────────────────────────────────────────
+
+  const toggleTaskSelection = useCallback((taskId: string) => {
+    setSelectedTasks(prev =>
+      prev.includes(taskId)
+        ? prev.filter(id => id !== taskId)
+        : [...prev, taskId]
     );
-  };
+  }, []);
 
-  const optimizePlan = () => {
+  const selectAllTasks = useCallback(() => {
+    const pendingIds = tasks.filter(t => t.status === 'PENDING').map(t => t.id);
+    setSelectedTasks(pendingIds);
+  }, [tasks]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedTasks([]);
+  }, []);
+
+  // ─── Optimization ──────────────────────────────────────────
+
+  const optimizePlan = useCallback(() => {
+    if (selectedTasks.length === 0) return;
     setIsOptimizing(true);
+
+    // Simulate computation delay for demo effect
     setTimeout(() => {
-      // Mock Optimizer Logic (Google OR-Tools CP-SAT simulation)
-      const selected = tasks.filter(t => selectedTasks.includes(t.id));
-      const sectionGrouped = selected.reduce((acc, task) => {
-        acc[task.location] = acc[task.location] || [];
-        acc[task.location].push(task);
-        return acc;
-      }, {} as Record<string, MaintenanceTask[]>);
+      const plan = optimizeBlocks(tasks, blocks, TRAIN_MOVEMENTS, selectedTasks);
 
-      const newOptimized = [...blocks];
-      
-      for (const section in sectionGrouped) {
-        const availableBlock = newOptimized.find(b => b.section === section && b.status === 'AVAILABLE');
-        if (availableBlock) {
-          const tasksForBlock = sectionGrouped[section];
-          const totalDuration = tasksForBlock.reduce((sum, t) => sum + t.duration, 0);
-          if (totalDuration <= availableBlock.duration) {
-             availableBlock.status = 'SCHEDULED';
-             availableBlock.bundledTasks = tasksForBlock.map(t => t.id);
-             
-             // Update task status
-             setTasks(prev => prev.map(t => 
-                tasksForBlock.some(tb => tb.id === t.id) ? { ...t, status: 'PLANNED' } : t
-             ));
-          }
-        }
+      // Update blocks
+      setBlocks(plan.blocks);
+
+      // Update task statuses
+      const assignedIds = new Set<string>();
+      for (const ids of Object.values(plan.taskAssignments)) {
+        ids.forEach(id => assignedIds.add(id));
       }
-      
-      setOptimizedBlocks(newOptimized.filter(b => b.status === 'SCHEDULED'));
-      setIsOptimizing(false);
-    }, 2000);
-  };
 
-  const addEmergencyDefect = () => {
-    const emergency: MaintenanceTask = {
-      id: `E-${Math.floor(Math.random() * 1000)}`,
+      setTasks(prev => prev.map(t =>
+        assignedIds.has(t.id) ? { ...t, status: 'PLANNED' as const } : t
+      ));
+
+      // Update block requests
+      setBlockRequests(prev => prev.map(r =>
+        assignedIds.has(r.taskId) ? { ...r, status: 'PLANNED' as const } : r
+      ));
+
+      setOptimizedPlan(plan);
+      setSelectedTasks([]);
+      setIsOptimizing(false);
+    }, 1800);
+  }, [selectedTasks, tasks, blocks]);
+
+  const resetOptimization = useCallback(() => {
+    setBlocks(INITIAL_BLOCKS);
+    setTasks(INITIAL_TASKS);
+    setBlockRequests(INITIAL_BLOCK_REQUESTS);
+    setOptimizedPlan(null);
+    setSelectedTasks([]);
+  }, []);
+
+  // ─── Emergency Defect ───────────────────────────────────────
+
+  const addEmergencyDefect = useCallback((section: string = 'DDN-HW') => {
+    const sectionData = SECTIONS.find(s => s.id === section);
+    const sectionLabel = sectionData ? sectionData.label : section;
+
+    const emergencyTask: MaintenanceTask = {
+      id: `EM-${Date.now()}`,
       department: 'Engineering',
-      asset: 'Track Fracture',
-      location: 'DDN-Haridwar',
+      asset: 'Critical Track Fracture',
+      location: sectionLabel,
+      section,
       priority: 'CRITICAL',
       risk: 99,
-      duration: 180,
-      deadline: 'Immediate',
-      status: 'PENDING'
+      duration: 90,
+      deadline: 'IMMEDIATE',
+      status: 'PENDING',
+      description: 'EMERGENCY: Critical rail fracture detected. Requires immediate block for repair.',
+      safetyImpact: 'CRITICAL',
     };
-    setTasks([emergency, ...tasks]);
-  };
+
+    const newDefect: Defect = {
+      id: `DEF-${Date.now()}`,
+      type: 'Track Fracture',
+      location: sectionLabel,
+      section,
+      severity: 'CRITICAL',
+      risk: 99,
+      reportedAt: new Date().toISOString(),
+      duration: 90,
+      status: 'OPEN',
+    };
+
+    setTasks(prev => [emergencyTask, ...prev]);
+    setDefects(prev => [newDefect, ...prev]);
+
+    // Auto-select the emergency task
+    setSelectedTasks(prev => [emergencyTask.id, ...prev]);
+  }, []);
+
+  // ─── Approvals ──────────────────────────────────────────────
+
+  const approveBlock = useCallback((blockId: string) => {
+    setBlocks(prev => prev.map(b =>
+      b.id === blockId
+        ? { ...b, status: 'APPROVED' as const, approvalStatus: 'APPROVED' as const, approvedBy: 'COA Officer' }
+        : b
+    ));
+    // Update associated task statuses and requests
+    const block = blocks.find(b => b.id === blockId);
+    if (block) {
+      setBlockRequests(prev => prev.map(r =>
+        block.bundledTasks.includes(r.taskId) ? { ...r, status: 'APPROVED' as const } : r
+      ));
+    }
+  }, [blocks]);
+
+  const rejectBlock = useCallback((blockId: string) => {
+    setBlocks(prev => prev.map(b =>
+      b.id === blockId
+        ? { ...b, status: 'AVAILABLE' as const, approvalStatus: 'REJECTED' as const, bundledTasks: [], utilization: 0 }
+        : b
+    ));
+    // Revert tasks to PENDING
+    const block = blocks.find(b => b.id === blockId);
+    if (block) {
+      setTasks(prev => prev.map(t =>
+        block.bundledTasks.includes(t.id) ? { ...t, status: 'PENDING' as const } : t
+      ));
+      setBlockRequests(prev => prev.map(r =>
+        block.bundledTasks.includes(r.taskId) ? { ...r, status: 'REJECTED' as const } : r
+      ));
+    }
+  }, [blocks]);
+
+  // ─── What-If ────────────────────────────────────────────────
+
+  const applyScenario = useCallback((scenarioId: string) => {
+    setScenarios(prev => prev.map(s =>
+      s.id === scenarioId ? { ...s, applied: true } : s
+    ));
+
+    const scenario = scenarios.find(s => s.id === scenarioId);
+    if (!scenario) return;
+
+    switch (scenario.type) {
+      case 'ADD_DEFECT':
+        addEmergencyDefect(scenario.parameters.section as string);
+        break;
+      case 'INCREASE_DURATION': {
+        const taskId = scenario.parameters.taskId as string;
+        const newDuration = scenario.parameters.newDuration as number;
+        setTasks(prev => prev.map(t =>
+          t.id === taskId ? { ...t, duration: newDuration } : t
+        ));
+        break;
+      }
+      case 'REMOVE_BLOCK': {
+        const blockId = scenario.parameters.blockId as string;
+        setBlocks(prev => prev.filter(b => b.id !== blockId));
+        break;
+      }
+      default:
+        break;
+    }
+  }, [scenarios, addEmergencyDefect]);
+
+  const resetScenarios = useCallback(() => {
+    setScenarios(DEFAULT_SCENARIOS);
+    setTasks(INITIAL_TASKS);
+    setBlocks(INITIAL_BLOCKS);
+    setBlockRequests(INITIAL_BLOCK_REQUESTS);
+    setDefects([]);
+    setOptimizedPlan(null);
+    setSelectedTasks([]);
+  }, []);
+
+  const reOptimize = useCallback(() => {
+    // Select all pending tasks and re-run
+    const pendingIds = tasks.filter(t => t.status === 'PENDING').map(t => t.id);
+    setSelectedTasks(pendingIds);
+    // We need to delay the optimization call until state is updated
+    setTimeout(() => {
+      setIsOptimizing(true);
+      setTimeout(() => {
+        const plan = optimizeBlocks(
+          tasks,
+          blocks.map(b => ({ ...b, status: b.status === 'SCHEDULED' ? 'AVAILABLE' as const : b.status, bundledTasks: b.status === 'SCHEDULED' ? [] : b.bundledTasks, utilization: b.status === 'SCHEDULED' ? 0 : b.utilization })),
+          TRAIN_MOVEMENTS,
+          pendingIds
+        );
+        setBlocks(plan.blocks);
+        const assignedIds = new Set<string>();
+        for (const ids of Object.values(plan.taskAssignments)) {
+          ids.forEach(id => assignedIds.add(id));
+        }
+        setTasks(prev => prev.map(t =>
+          assignedIds.has(t.id) ? { ...t, status: 'PLANNED' as const } : t
+        ));
+        setOptimizedPlan(plan);
+        setSelectedTasks([]);
+        setIsOptimizing(false);
+      }, 1500);
+    }, 100);
+  }, [tasks, blocks]);
+
+  // ─── Block Requests ─────────────────────────────────────────
+
+  const updateRequestStatus = useCallback((requestId: string, status: BlockRequest['status']) => {
+    setBlockRequests(prev => prev.map(r =>
+      r.id === requestId ? { ...r, status } : r
+    ));
+  }, []);
 
   return (
     <BlockContext.Provider value={{
-      tasks, blocks, trains, toggleTaskSelection, selectedTasks, optimizePlan, isOptimizing, optimizedBlocks, addEmergencyDefect
+      stations: STATIONS,
+      sections: SECTIONS,
+      trains: TRAINS,
+      timetable: TIMETABLE,
+      trainMovements: TRAIN_MOVEMENTS,
+      tasks,
+      blocks,
+      blockRequests,
+      defects,
+      scenarios,
+      selectedTasks,
+      toggleTaskSelection,
+      selectAllTasks,
+      clearSelection,
+      isOptimizing,
+      optimizedPlan,
+      optimizePlan,
+      resetOptimization,
+      addEmergencyDefect,
+      approveBlock,
+      rejectBlock,
+      applyScenario,
+      resetScenarios,
+      reOptimize,
+      updateRequestStatus,
     }}>
       {children}
     </BlockContext.Provider>
   );
-};
+}
 
-export const useBlockContext = () => {
+export function useBlockContext() {
   const context = useContext(BlockContext);
   if (!context) throw new Error('useBlockContext must be used within BlockProvider');
   return context;
-};
+}

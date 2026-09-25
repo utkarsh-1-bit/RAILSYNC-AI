@@ -1,5 +1,5 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import DashboardPage from './pages/DashboardPage';
 import TrainsPage from './pages/TrainsPage';
@@ -19,7 +19,7 @@ const pageTitles: Record<string, string> = {
   '/stations': 'Stations',
   '/schedules': 'Timetable',
   '/optimize': 'Optimization Engine',
-  '/block-planning': 'Block Planning Analyzer',
+  '/block-planning': 'AI Block Planning',
   '/requests': 'Block Requests',
   '/what-if': 'What-If Simulation',
   '/approvals': 'Approvals',
@@ -27,11 +27,11 @@ const pageTitles: Record<string, string> = {
 };
 
 function AppShell() {
-  const path = window.location.pathname;
-  const pageTitle = pageTitles[path] || 'RAILSYNC AI';
-  
+  const location = useLocation();
+  const pageTitle = pageTitles[location.pathname] || 'RAILSYNC AI';
+
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
-  
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
@@ -48,14 +48,12 @@ function AppShell() {
         <header className="top-header">
           <div className="top-header-title">{pageTitle}</div>
           <div className="top-header-actions">
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginRight: '0.5rem' }}>
+              SIH 2026 Prototype
+            </span>
             <button onClick={toggleTheme} className="btn btn-ghost" style={{ fontSize: '1.2rem', padding: '0.2rem 0.5rem'}}>
               {theme === 'dark' ? '☀' : '🌙'}
             </button>
-            <input
-              type="text"
-              className="header-search"
-              placeholder="Search trains, stations…"
-            />
           </div>
         </header>
         <main className="page-content">
@@ -80,10 +78,7 @@ function AppShell() {
 export default function App() {
   return (
     <BrowserRouter>
-      <BlockProvider>
-        <AppShell />
-      </BlockProvider>
+      <AppShell />
     </BrowserRouter>
   );
-}
 }
