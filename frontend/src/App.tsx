@@ -11,6 +11,7 @@ import BlockRequestsPage from './pages/BlockRequestsPage';
 import WhatIfPage from './pages/WhatIfPage';
 import ApprovalsPage from './pages/ApprovalsPage';
 import MapPage from './pages/MapPage';
+import { BlockProvider } from './context/BlockContext';
 
 const pageTitles: Record<string, string> = {
   '/': 'Dashboard',
@@ -79,7 +80,10 @@ function AppShell() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AppShell />
+      <BlockProvider>
+        <AppShell />
+      </BlockProvider>
     </BrowserRouter>
   );
+}
 }
