@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Train as TrainIcon,
   Gauge,
@@ -8,8 +8,7 @@ import {
   XCircle,
   Clock,
 } from 'lucide-react';
-import { apiFetch } from '../api';
-import type { Train } from '../api';
+import { getTrainsFlat, type TrainFlat } from '../data/scheduleData';
 
 const statusBadge = (status: string) => {
   switch (status) {
@@ -31,16 +30,8 @@ const priorityLabel = (p: number) => {
 };
 
 export default function TrainsPage() {
-  const [trains, setTrains] = useState<Train[]>([]);
-  const [loading, setLoading] = useState(true);
+  const trains = useMemo(() => getTrainsFlat(), []);
   const [filter, setFilter] = useState('all');
-
-  useEffect(() => {
-    apiFetch<Train[]>('/trains/')
-      .then(setTrains)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
 
   const filtered = filter === 'all' ? trains : trains.filter((t) => t.status === filter);
 
@@ -98,11 +89,7 @@ export default function TrainsPage() {
 
       {/* Table */}
       <div className="panel animate-in">
-        {loading ? (
-          <div className="empty-state">
-            <div className="loader"><div className="loader-dot" /><div className="loader-dot" /><div className="loader-dot" /></div>
-          </div>
-        ) : filtered.length === 0 ? (
+        {filtered.length === 0 ? (
           <div className="empty-state">
             <TrainIcon />
             <div className="empty-state-title">No trains found</div>

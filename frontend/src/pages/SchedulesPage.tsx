@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CalendarClock, Train, MapPin, Clock, AlertTriangle } from 'lucide-react';
-import { apiFetch } from '../api';
-import type { ScheduleEntry, Train as TrainType } from '../api';
+import { SCHEDULE_ENTRIES, getTrainsFlat, type ScheduleEntry, type TrainFlat } from '../data/scheduleData';
 
 function formatTime(iso: string | null) {
   if (!iso) return '—';
@@ -10,27 +9,13 @@ function formatTime(iso: string | null) {
 }
 
 export default function SchedulesPage() {
-  const [schedules, setSchedules] = useState<ScheduleEntry[]>([]);
-  const [trains, setTrains] = useState<TrainType[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedTrain, setSelectedTrain] = useState<number | null>(null);
+  const schedules = useMemo(() => SCHEDULE_ENTRIES, []);
+  const trains = useMemo(() => getTrainsFlat(), []);
+  const [selectedTrain, setSelectedTrain] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'timeline'>('table');
 
-  useEffect(() => {
-    Promise.all([
-      apiFetch<ScheduleEntry[]>('/schedules/'),
-      apiFetch<TrainType[]>('/trains/'),
-    ])
-      .then(([s, t]) => {
-        setSchedules(s);
-        setTrains(t);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
-
   // Group schedules by train
-  const byTrain = schedules.reduce<Record<number, ScheduleEntry[]>>((acc, s) => {
+  const byTrain = schedules.reduce<Record<string, ScheduleEntry[]>>((acc, s) => {
     acc[s.train_id] = acc[s.train_id] || [];
     acc[s.train_id].push(s);
     return acc;
@@ -89,11 +74,7 @@ export default function SchedulesPage() {
         </button>
       </div>
 
-      {loading ? (
-        <div className="empty-state">
-          <div className="loader"><div className="loader-dot" /><div className="loader-dot" /><div className="loader-dot" /></div>
-        </div>
-      ) : viewMode === 'table' ? (
+      {viewMode === 'table' ? (
         /* Table View */
         <div className="panel animate-in">
           {selectedTrainData && (
@@ -156,7 +137,7 @@ export default function SchedulesPage() {
       ) : (
         /* Timeline View */
         <div className="grid-2">
-          {(selectedTrain ? [selectedTrain] : Object.keys(byTrain).map(Number)).map((trainId) => {
+          {(selectedTrain ? [selectedTrain] : Object.keys(byTrain)).map((trainId) => {
             const stops = byTrain[trainId] || [];
             const trainInfo = trains.find((t) => t.id === trainId);
             return (

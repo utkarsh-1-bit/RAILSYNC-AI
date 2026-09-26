@@ -1,19 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { MapPin, Layers, Navigation } from 'lucide-react';
-import { apiFetch } from '../api';
-import type { Station } from '../api';
+import { getStationsFlat } from '../data/scheduleData';
 
 export default function StationsPage() {
-  const [stations, setStations] = useState<Station[]>([]);
-  const [loading, setLoading] = useState(true);
+  const stations = useMemo(() => getStationsFlat(), []);
   const [selectedZone, setSelectedZone] = useState('all');
-
-  useEffect(() => {
-    apiFetch<Station[]>('/stations/')
-      .then(setStations)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
 
   const zones = ['all', ...new Set(stations.map((s) => s.zone))];
   const filtered = selectedZone === 'all' ? stations : stations.filter((s) => s.zone === selectedZone);
@@ -65,11 +56,7 @@ export default function StationsPage() {
 
       {/* Station grid */}
       <div className="animate-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-        {loading ? (
-          <div className="empty-state">
-            <div className="loader"><div className="loader-dot" /><div className="loader-dot" /><div className="loader-dot" /></div>
-          </div>
-        ) : filtered.map((station) => (
+        {filtered.map((station) => (
           <div className="panel" key={station.id} style={{ transition: 'all 0.2s' }}>
             <div className="flex items-center gap-1 mb-1">
               <div className="stat-card-icon violet" style={{ width: 32, height: 32 }}>

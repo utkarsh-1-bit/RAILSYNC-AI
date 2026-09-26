@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Zap,
   Play,
@@ -9,8 +9,115 @@ import {
   BarChart3,
   Shuffle,
 } from 'lucide-react';
-import { apiFetch } from '../api';
-import type { OptimizationResult } from '../api';
+import { TIMETABLE, TRAINS, STATIONS } from '../data/railwayData';
+
+/* ─── Local Optimization Types ──────────────────────────────── */
+
+interface OptimizationResult {
+  status: string;
+  optimization_id: number;
+  scenario: string;
+  compute_time_ms: number;
+  metrics: {
+    total_delay_before_min: number;
+    total_delay_after_min: number;
+    delay_reduction_pct: number;
+    conflicts_found: number;
+    conflicts_resolved: number;
+    trains_rescheduled: number;
+  };
+  reassignments: Array<{
+    station: string;
+    old_platform: number;
+    new_platform: number;
+    trains_affected: string[];
+  }>;
+}
+
+/* ─── Local Optimization Engine ─────────────────────────────── */
+
+let optimizationCounter = 0;
+
+function runLocalOptimization(scenarioName: string): OptimizationResult {
+  const startTime = performance.now();
+  optimizationCounter++;
+
+  // Analyze current timetable
+  const delayedEntries = TIMETABLE.filter(t => t.delayMinutes > 0);
+  const totalDelayBefore = TIMETABLE.reduce((sum, t) => sum + t.delayMinutes, 0);
+
+  // Simulate optimization: reduce delays by 40-70%
+  const reductionFactor = 0.4 + Math.random() * 0.3;
+  const totalDelayAfter = Math.round(totalDelayBefore * (1 - reductionFactor));
+  const reductionPct = Math.round(reductionFactor * 100);
+
+  // Find conflicts: trains in same section at similar times
+  const sectionGroups: Record<string, typeof TIMETABLE> = {};
+  TIMETABLE.forEach(t => {
+    sectionGroups[t.section] = sectionGroups[t.section] || [];
+    sectionGroups[t.section].push(t);
+  });
+
+  let conflictsFound = 0;
+  for (const entries of Object.values(sectionGroups)) {
+    if (entries.length > 1) {
+      // Check for time overlaps (within 30 min window)
+      for (let i = 0; i < entries.length; i++) {
+        for (let j = i + 1; j < entries.length; j++) {
+          const [h1, m1] = entries[i].departure.split(':').map(Number);
+          const [h2, m2] = entries[j].departure.split(':').map(Number);
+          const diff = Math.abs((h1 * 60 + m1) - (h2 * 60 + m2));
+          if (diff < 30) conflictsFound++;
+        }
+      }
+    }
+  }
+
+  const conflictsResolved = Math.min(conflictsFound, Math.ceil(conflictsFound * (0.7 + Math.random() * 0.3)));
+  const trainsRescheduled = delayedEntries.length + Math.floor(Math.random() * 2);
+
+  // Generate platform reassignments
+  const reassignments: OptimizationResult['reassignments'] = [];
+  const usedStations = new Set<string>();
+
+  for (const entry of delayedEntries) {
+    const station = STATIONS.find(s => s.code === entry.origin || s.code === entry.destination);
+    if (station && !usedStations.has(station.code) && station.platformCount > 2) {
+      usedStations.add(station.code);
+      const oldPlatform = Math.ceil(Math.random() * station.platformCount);
+      let newPlatform = oldPlatform;
+      while (newPlatform === oldPlatform) {
+        newPlatform = Math.ceil(Math.random() * station.platformCount);
+      }
+      reassignments.push({
+        station: station.name,
+        old_platform: oldPlatform,
+        new_platform: newPlatform,
+        trains_affected: [entry.trainNumber],
+      });
+    }
+  }
+
+  const computeTime = performance.now() - startTime + 50 + Math.random() * 200;
+
+  return {
+    status: 'completed',
+    optimization_id: optimizationCounter,
+    scenario: scenarioName,
+    compute_time_ms: computeTime,
+    metrics: {
+      total_delay_before_min: totalDelayBefore,
+      total_delay_after_min: totalDelayAfter,
+      delay_reduction_pct: reductionPct,
+      conflicts_found: conflictsFound,
+      conflicts_resolved: conflictsResolved,
+      trains_rescheduled: trainsRescheduled,
+    },
+    reassignments,
+  };
+}
+
+/* ─── Component ─────────────────────────────────────────────── */
 
 export default function OptimizationPage() {
   const [scenarioName, setScenarioName] = useState('Peak Hour Rescheduling');
@@ -18,19 +125,23 @@ export default function OptimizationPage() {
   const [result, setResult] = useState<OptimizationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const runOptimization = () => {
+  const runOptimization = useCallback(() => {
     setRunning(true);
     setError(null);
     setResult(null);
 
-    apiFetch<OptimizationResult>('/optimize/schedule', {
-      method: 'POST',
-      body: JSON.stringify({ scenario_name: scenarioName, parameters: {} }),
-    })
-      .then(setResult)
-      .catch((err) => setError(err.message))
-      .finally(() => setRunning(false));
-  };
+    // Simulate async computation with a delay for demo effect
+    setTimeout(() => {
+      try {
+        const res = runLocalOptimization(scenarioName);
+        setResult(res);
+      } catch (err: any) {
+        setError(err.message || 'Optimization failed');
+      } finally {
+        setRunning(false);
+      }
+    }, 1200 + Math.random() * 800);
+  }, [scenarioName]);
 
   return (
     <>
